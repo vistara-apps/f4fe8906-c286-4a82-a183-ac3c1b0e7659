@@ -228,7 +228,7 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {user.trustedContacts.map((contact) => (
+                    {user?.trustedContacts.map((contact) => (
                       <div key={contact.id} className="bg-black bg-opacity-20 rounded-lg p-3 flex items-center justify-between">
                         <div>
                           <div className="text-white font-medium">{contact.name}</div>
