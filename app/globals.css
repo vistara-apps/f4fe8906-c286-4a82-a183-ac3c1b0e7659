@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: hsl(210, 70%, 50%);
+  --color-accent: hsl(140, 60%, 45%);
+  --color-surface: hsl(220, 25%, 100%);
+  --color-background: hsl(220, 25%, 96%);
+  --color-border: hsl(220, 25%, 85%);
+  --color-text-primary: hsl(220, 25%, 20%);
+  --color-text-secondary: hsl(220, 25%, 50%);
+}
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  
+  body {
+    @apply bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white min-h-screen;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white bg-opacity-10 backdrop-blur-lg border border-white border-opacity-20 rounded-lg shadow-card;
+  }
+  
+  .btn-primary {
+    @apply bg-gradient-to-r from-orange-400 to-orange-500 text-white px-6 py-3 rounded-lg font-medium hover:from-orange-500 hover:to-orange-600 transition-all duration-200 shadow-lg hover:shadow-xl;
+  }
+  
+  .btn-secondary {
+    @apply bg-white bg-opacity-20 text-white px-6 py-3 rounded-lg font-medium hover:bg-opacity-30 transition-all duration-200 border border-white border-opacity-30;
+  }
+  
+  .metric-card {
+    @apply glass-card p-4 hover:bg-opacity-15 transition-all duration-200;
+  }
+  
+  .recording-pulse {
+    @apply animate-pulse-recording;
+  }
+}
