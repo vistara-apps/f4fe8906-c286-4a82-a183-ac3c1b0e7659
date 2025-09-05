@@ -6,31 +6,50 @@ import { ContentCard } from './ContentCard';
 
 interface AlertButtonProps {
   variant?: 'default';
-  trustedContacts?: Array<{ name: string; phone: string }>;
+  trustedContacts?: Array<{ id: string; name: string; phone: string; email?: string }>;
+  onSendAlert?: (message?: string) => Promise<void>;
+  sending?: boolean;
 }
 
-export function AlertButton({ variant = 'default', trustedContacts = [] }: AlertButtonProps) {
+export function AlertButton({ 
+  variant = 'default', 
+  trustedContacts = [], 
+  onSendAlert,
+  sending: externalSending = false 
+}: AlertButtonProps) {
   const [alertSent, setAlertSent] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [internalSending, setInternalSending] = useState(false);
+  
+  const sending = externalSending || internalSending;
 
   const handleSendAlert = async () => {
     if (trustedContacts.length === 0) {
-      alert('Please set up trusted contacts first in your profile.');
+      alert('Please set up trusted contacts first.');
       return;
     }
 
-    setSending(true);
-    
-    // Simulate sending alert
-    setTimeout(() => {
-      setAlertSent(true);
-      setSending(false);
-      
-      // Reset after 5 seconds
+    if (onSendAlert) {
+      try {
+        await onSendAlert();
+        setAlertSent(true);
+        // Reset after 5 seconds
+        setTimeout(() => {
+          setAlertSent(false);
+        }, 5000);
+      } catch (error) {
+        console.error('Failed to send alert:', error);
+      }
+    } else {
+      // Fallback behavior
+      setInternalSending(true);
       setTimeout(() => {
-        setAlertSent(false);
-      }, 5000);
-    }, 2000);
+        setAlertSent(true);
+        setInternalSending(false);
+        setTimeout(() => {
+          setAlertSent(false);
+        }, 5000);
+      }, 2000);
+    }
   };
 
   if (alertSent) {

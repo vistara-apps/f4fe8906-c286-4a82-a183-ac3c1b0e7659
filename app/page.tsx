@@ -9,7 +9,11 @@ import { ScriptViewer } from '@/components/ScriptViewer';
 import { RecordingButton } from '@/components/RecordingButton';
 import { AlertButton } from '@/components/AlertButton';
 import { ActionChip } from '@/components/ActionChip';
-import { useUser, useStateLaw, useScripts } from '@/lib/hooks';
+import { TrustedContactsManager } from '@/components/TrustedContactsManager';
+import { EncounterCard } from '@/components/EncounterCard';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { NotificationSystem, useNotifications } from '@/components/NotificationSystem';
+import { useUser, useStateLaw, useScripts, useTrustedContacts, useEncounters, useAlerts, useLocation } from '@/lib/hooks';
 import { stateLaws, scripts } from '@/lib/data';
 import { 
   BookOpen, 
@@ -25,9 +29,14 @@ export default function HomePage() {
   const { setFrameReady } = useMiniKit();
   const { user, loading: userLoading, updateUser } = useUser();
   const [selectedState, setSelectedState] = useState<string>('CA');
-  const [activeTab, setActiveTab] = useState<'overview' | 'scripts' | 'record' | 'alert'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'scripts' | 'record' | 'alert' | 'encounters'>('overview');
   const { stateLaw, loading: lawLoading } = useStateLaw(selectedState);
   const { scripts: scriptList, loading: scriptsLoading } = useScripts();
+  const { contacts, loading: contactsLoading, addContact, removeContact } = useTrustedContacts(user?.userId);
+  const { encounters, loading: encountersLoading, createEncounter } = useEncounters(user?.userId);
+  const { sendAlert, sending: alertSending } = useAlerts();
+  const { location, getCurrentLocation } = useLocation();
+  const { notifications, dismissNotification, showSuccess, showError } = useNotifications();
 
   useEffect(() => {
     setFrameReady();
@@ -58,8 +67,13 @@ export default function HomePage() {
   }
 
   return (
-    <AppShell>
-      <div className="space-y-6 pb-24">
+    <ErrorBoundary>
+      <AppShell>
+        <NotificationSystem 
+          notifications={notifications} 
+          onDismiss={dismissNotification} 
+        />
+        <div className="space-y-6 pb-24">
         {/* Hero Section */}
         <ContentCard variant="highlight">
           <div className="text-center space-y-4">
@@ -198,10 +212,28 @@ export default function HomePage() {
                   </p>
                 </div>
                 
-                <RecordingButton />
+                <RecordingButton 
+                  userId={user?.userId}
+                  location={location || selectedState}
+                  onRecordingComplete={async (recordingUrl) => {
+                    if (user) {
+                      try {
+                        await createEncounter({
+                          userId: user.userId,
+                          location: location || selectedState,
+                          recordingUrl,
+                          notes: 'Audio recording created'
+                        });
+                      } catch (error) {
+                        console.error('Failed to create encounter:', error);
+                      }
+                    }
+                  }}
+                />
                 
                 <div className="text-xs text-gray-400 max-w-sm mx-auto">
-                  Recordings are stored locally on your device. Always check local laws regarding recording consent.
+                  Recordings are stored securely and will automatically create an encounter record. 
+                  Always check local laws regarding recording consent.
                 </div>
               </div>
             </ContentCard>
@@ -210,35 +242,78 @@ export default function HomePage() {
 
         {activeTab === 'alert' && (
           <div className="space-y-6">
-            <AlertButton trustedContacts={user?.trustedContacts || []} />
+            <AlertButton 
+              trustedContacts={contacts} 
+              onSendAlert={async (message) => {
+                try {
+                  const currentLocation = location || selectedState;
+                  await sendAlert(user?.userId || '', currentLocation, contacts, message);
+                  showSuccess('Alert Sent', `Successfully notified ${contacts.length} trusted contact${contacts.length !== 1 ? 's' : ''}`);
+                } catch (error) {
+                  showError('Alert Failed', 'Failed to send alert. Please try again.');
+                }
+              }}
+              sending={alertSending}
+            />
             
+            <TrustedContactsManager
+              contacts={contacts}
+              onAddContact={addContact}
+              onRemoveContact={removeContact}
+              loading={contactsLoading}
+            />
+          </div>
+        )}
+
+        {activeTab === 'encounters' && (
+          <div className="space-y-6">
             <ContentCard>
-              <div className="space-y-4">
-                <div className="flex items-center space-x-3">
-                  <Users className="w-6 h-6 text-blue-400" />
-                  <h3 className="text-xl font-semibold text-white">Trusted Contacts</h3>
-                </div>
-                
-                {user?.trustedContacts.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-gray-300 mb-4">No trusted contacts set up yet.</p>
-                    <button className="btn-primary">
-                      Add Trusted Contact
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {user.trustedContacts.map((contact) => (
-                      <div key={contact.id} className="bg-black bg-opacity-20 rounded-lg p-3 flex items-center justify-between">
-                        <div>
-                          <div className="text-white font-medium">{contact.name}</div>
-                          <div className="text-gray-300 text-sm">{contact.phone}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-white">Encounter History</h3>
+                <button
+                  onClick={() => {
+                    // Create a new encounter
+                    if (user) {
+                      createEncounter({
+                        userId: user.userId,
+                        location: location || selectedState,
+                        notes: 'Manual encounter entry'
+                      });
+                    }
+                  }}
+                  className="btn-primary text-sm"
+                >
+                  Add Encounter
+                </button>
               </div>
+              
+              {encountersLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="animate-pulse bg-black bg-opacity-20 rounded-lg p-4 h-32"></div>
+                  ))}
+                </div>
+              ) : encounters.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-300 mb-4">No encounters recorded yet.</p>
+                  <p className="text-gray-400 text-sm">
+                    Encounters will be automatically created when you use recording or scripts.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {encounters.map((encounter) => (
+                    <EncounterCard
+                      key={encounter.encounterId}
+                      encounter={encounter}
+                      onShare={(encounter) => {
+                        console.log('Sharing encounter:', encounter.encounterId);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </ContentCard>
           </div>
         )}
@@ -246,40 +321,40 @@ export default function HomePage() {
         {/* Navigation Tabs */}
         <div className="fixed bottom-20 left-4 right-4 max-w-screen-sm mx-auto">
           <div className="glass-card p-2 rounded-lg">
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-5 gap-1">
               <button
                 onClick={() => setActiveTab('overview')}
-                className={`p-3 rounded-lg transition-colors duration-200 ${
+                className={`p-2 rounded-lg transition-colors duration-200 ${
                   activeTab === 'overview' 
                     ? 'bg-orange-500 text-white' 
                     : 'text-gray-300 hover:bg-white hover:bg-opacity-10'
                 }`}
               >
-                <Shield className="w-5 h-5 mx-auto mb-1" />
-                <div className="text-xs">Overview</div>
+                <Shield className="w-4 h-4 mx-auto mb-1" />
+                <div className="text-xs">Laws</div>
               </button>
               
               <button
                 onClick={() => setActiveTab('scripts')}
-                className={`p-3 rounded-lg transition-colors duration-200 ${
+                className={`p-2 rounded-lg transition-colors duration-200 ${
                   activeTab === 'scripts' 
                     ? 'bg-orange-500 text-white' 
                     : 'text-gray-300 hover:bg-white hover:bg-opacity-10'
                 }`}
               >
-                <FileText className="w-5 h-5 mx-auto mb-1" />
+                <FileText className="w-4 h-4 mx-auto mb-1" />
                 <div className="text-xs">Scripts</div>
               </button>
               
               <button
                 onClick={() => setActiveTab('record')}
-                className={`p-3 rounded-lg transition-colors duration-200 ${
+                className={`p-2 rounded-lg transition-colors duration-200 ${
                   activeTab === 'record' 
                     ? 'bg-orange-500 text-white' 
                     : 'text-gray-300 hover:bg-white hover:bg-opacity-10'
                 }`}
               >
-                <div className="w-5 h-5 mx-auto mb-1 bg-red-500 rounded-full flex items-center justify-center">
+                <div className="w-4 h-4 mx-auto mb-1 bg-red-500 rounded-full flex items-center justify-center">
                   <div className="w-2 h-2 bg-white rounded-full"></div>
                 </div>
                 <div className="text-xs">Record</div>
@@ -287,19 +362,32 @@ export default function HomePage() {
               
               <button
                 onClick={() => setActiveTab('alert')}
-                className={`p-3 rounded-lg transition-colors duration-200 ${
+                className={`p-2 rounded-lg transition-colors duration-200 ${
                   activeTab === 'alert' 
                     ? 'bg-orange-500 text-white' 
                     : 'text-gray-300 hover:bg-white hover:bg-opacity-10'
                 }`}
               >
-                <Users className="w-5 h-5 mx-auto mb-1" />
+                <Users className="w-4 h-4 mx-auto mb-1" />
                 <div className="text-xs">Alert</div>
+              </button>
+              
+              <button
+                onClick={() => setActiveTab('encounters')}
+                className={`p-2 rounded-lg transition-colors duration-200 ${
+                  activeTab === 'encounters' 
+                    ? 'bg-orange-500 text-white' 
+                    : 'text-gray-300 hover:bg-white hover:bg-opacity-10'
+                }`}
+              >
+                <BookOpen className="w-4 h-4 mx-auto mb-1" />
+                <div className="text-xs">History</div>
               </button>
             </div>
           </div>
         </div>
-      </div>
-    </AppShell>
+        </div>
+      </AppShell>
+    </ErrorBoundary>
   );
 }

@@ -8,12 +8,18 @@ interface RecordingButtonProps {
   variant?: 'active' | 'inactive';
   onRecordingStart?: () => void;
   onRecordingStop?: (recordingData: any) => void;
+  onRecordingComplete?: (recordingUrl: string) => void;
+  userId?: string;
+  location?: string;
 }
 
 export function RecordingButton({ 
   variant = 'inactive',
   onRecordingStart,
-  onRecordingStop 
+  onRecordingStop,
+  onRecordingComplete,
+  userId,
+  location
 }: RecordingButtonProps) {
   const { isRecording, recordingTime, startRecording, stopRecording } = useRecording();
 
@@ -21,6 +27,12 @@ export function RecordingButton({
     if (isRecording) {
       stopRecording();
       onRecordingStop?.(null); // In a real app, pass recording data
+      
+      // Simulate creating a recording URL and encounter
+      if (onRecordingComplete && userId) {
+        const recordingUrl = `recording-${Date.now()}.wav`;
+        onRecordingComplete(recordingUrl);
+      }
     } else {
       await startRecording();
       onRecordingStart?.();
